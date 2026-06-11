@@ -14,10 +14,21 @@
             <div class="bg-red-600 text-white font-bold px-3 py-1 rounded text-sm tracking-wider">JAGGAER</div>
             <h1 class="text-xl font-semibold tracking-tight">CSM AI Co-Pilot</h1>
         </div>
-        <div class="flex items-center space-x-2 mt-2 sm:mt-0">
-            <span class="text-xs text-slate-400">OpenAI API Key:</span>
-            <input type="password" id="apiKeyInput" placeholder="sk-..." class="bg-slate-800 text-xs text-white px-3 py-1.5 rounded border border-slate-700 focus:outline-none focus:border-red-500 w-48">
-            <button onclick="saveApiKey()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 rounded transition">Save</button>
+        
+        <div class="flex flex-wrap items-center gap-3 mt-2 sm:mt-0">
+            <div class="flex items-center space-x-2 text-xs">
+                <label for="apiProviderSelect" class="text-slate-400">AI Engine:</label>
+                <select id="apiProviderSelect" onchange="handleProviderChange()" class="bg-slate-800 text-white px-2 py-1.5 rounded border border-slate-700 focus:outline-none focus:border-red-500 font-medium">
+                    <option value="openai">OpenAI (GPT-4o-mini)</option>
+                    <option value="gemini">Google Gemini (1.5 Flash)</option>
+                    <option value="deepseek">DeepSeek (DeepSeek-V3)</option>
+                </select>
+            </div>
+            <div class="flex items-center space-x-2 text-xs">
+                <span id="apiKeyLabel" class="text-slate-400">API Key:</span>
+                <input type="password" id="apiKeyInput" placeholder="Enter key..." class="bg-slate-800 text-xs text-white px-3 py-1.5 rounded border border-slate-700 focus:outline-none focus:border-red-500 w-44">
+                <button onclick="saveApiKey()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 rounded transition">Save</button>
+            </div>
         </div>
     </nav>
 
@@ -161,8 +172,7 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            const savedKey = localStorage.getItem('jaggaer_openai_key');
-            if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+            handleProviderChange(); 
             
             const zone = document.getElementById('uploadZone');
             zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('border-red-500', 'bg-red-50/10'); });
@@ -178,10 +188,27 @@
             });
         });
 
+        function handleProviderChange() {
+            const provider = document.getElementById('apiProviderSelect').value;
+            const keyInput = document.getElementById('apiKeyInput');
+            
+            const savedKey = localStorage.getItem(`jaggaer_key_${provider}`);
+            keyInput.value = savedKey ? savedKey : '';
+
+            if (provider === 'openai') {
+                keyInput.placeholder = 'sk-proj-...';
+            } else if (provider === 'gemini') {
+                keyInput.placeholder = 'Enter Gemini Key...';
+            } else if (provider === 'deepseek') {
+                keyInput.placeholder = 'sk-...';
+            }
+        }
+
         function saveApiKey() {
+            const provider = document.getElementById('apiProviderSelect').value;
             const key = document.getElementById('apiKeyInput').value.trim();
-            localStorage.setItem('jaggaer_openai_key', key);
-            alert('OpenAI API key saved successfully in local storage.');
+            localStorage.setItem(`jaggaer_key_${provider}`, key);
+            alert(`API key for ${provider.toUpperCase()} saved to browser local storage context.`);
         }
 
         function handleFileSelect(e) {
@@ -373,18 +400,20 @@
             const aiContent = document.getElementById('aiContent');
 
             aiTarget.innerText = acc.customerName;
-            aiContent.innerHTML = `<span class="inline-block animate-bounce mr-1">⚡</span> Running multi-variable prompt synthesis...`;
+            aiContent.innerHTML = `<span class="inline-block animate-bounce mr-1">⚡</span> Routing token payload to selected model matrix...`;
             
             modal.classList.remove('hidden');
 
-            const apiKey = localStorage.getItem('jaggaer_openai_key');
+            const provider = document.getElementById('apiProviderSelect').value;
+            const apiKey = localStorage.getItem(`jaggaer_key_${provider}`);
             
-            if (!apiKey) {
-                setTimeout(() => { generateLocalInsight(acc, aiContent, false); }, 500);
+            // Removed strict prefix validation to support all formats (including AQ...)
+            if (!apiKey || apiKey.trim() === "") {
+                setTimeout(() => { generateLocalInsight(acc, aiContent, false, `Missing Local ${provider.toUpperCase()} Key`); }, 500);
                 return;
             }
 
-            const prompt = `You are an elite Customer Success Engineer at JAGGAER. Analyze this enterprise client's health vector and output exactly 2 sentences: Sentence 1: state exactly why this account is vulnerable based on their metrics. Sentence 2: Provide a specific strategic next action.
+            const basePrompt = `You are an elite Customer Success Engineer at JAGGAER. Analyze this enterprise client's health vector and output exactly 2 sentences: Sentence 1: state exactly why this account is vulnerable based on their metrics. Sentence 2: Provide a specific strategic next action.
             Account: ${acc.customerName}
             Health Score: ${acc.health}/100
             Product Adoption: ${acc.adoption}%
@@ -393,39 +422,68 @@
             Days since last meaningful CSM touch: ${acc.daysSinceTouch} days`;
 
             try {
-                const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey.trim()}`
-                    },
-                    body: JSON.stringify({
-                        model: 'gpt-4o-mini',
-                        messages: [{ role: 'user', content: prompt }],
-                        temperature: 0.3
-                    })
-                });
+                let response, data, resultText;
 
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    console.warn(`OpenAI API Error (${response.status}). Switching to local fallback.`);
-                    generateLocalInsight(acc, aiContent, true);
-                    return;
+                if (provider === 'openai') {
+                    response = await fetch('https://api.openai.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey.trim()}`
+                        },
+                        body: JSON.stringify({
+                            model: 'gpt-4o-mini',
+                            messages: [{ role: 'user', content: basePrompt }],
+                            temperature: 0.3
+                        })
+                    });
+                    data = await response.json();
+                    if (response.ok) resultText = data.choices[0].message.content;
+
+                } else if (provider === 'deepseek') {
+                    response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey.trim()}`
+                        },
+                        body: JSON.stringify({
+                            model: 'deepseek-chat',
+                            messages: [{ role: 'user', content: basePrompt }],
+                            temperature: 0.3
+                        })
+                    });
+                    data = await response.json();
+                    if (response.ok) resultText = data.choices[0].message.content;
+
+                } else if (provider === 'gemini') {
+                    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: basePrompt }] }],
+                            generationConfig: { temperature: 0.3 }
+                        })
+                    });
+                    data = await response.json();
+                    if (response.ok) resultText = data.candidates[0].content.parts[0].text;
                 }
 
-                if (data.choices && data.choices[0]) {
-                    aiContent.innerText = data.choices[0].message.content;
+                if (response && response.ok && resultText) {
+                    const providerTag = `<span class="text-[10px] bg-slate-700 text-red-400 px-1.5 py-0.5 rounded inline-block mb-2 font-mono uppercase">📡 Cloud Streaming (${provider}):</span>`;
+                    aiContent.innerHTML = `<div>${providerTag}</div><p class="text-xs text-slate-200 leading-relaxed">${resultText}</p>`;
                 } else {
-                    generateLocalInsight(acc, aiContent, true);
+                    console.warn(`${provider.toUpperCase()} API execution failed. Executing engine override.`);
+                    generateLocalInsight(acc, aiContent, true, `${provider.toUpperCase()} API Error`);
                 }
+
             } catch (err) {
-                console.error("Network constraint encountered, initializing local fallback framework:", err);
-                generateLocalInsight(acc, aiContent, true);
+                console.error("Network infrastructure exception. Activating fallback matrix:", err);
+                generateLocalInsight(acc, aiContent, true, "Network Exception");
             }
         }
 
-        function generateLocalInsight(acc, container, wasFallback = false) {
+        function generateLocalInsight(acc, container, wasFallback = false, statusMessage = "") {
             let insight = "";
             let action = "";
 
@@ -444,8 +502,8 @@
             }
 
             const prefix = wasFallback 
-                ? `<span class="text-[10px] bg-slate-700 text-amber-400 px-1.5 py-0.5 rounded inline-block mb-2 font-mono">⚠️ OpenAI Billing Limit (429) - Executing Local Analytix Engine:</span>`
-                : `<span class="text-[10px] bg-slate-700 text-emerald-400 px-1.5 py-0.5 rounded inline-block mb-2 font-mono">🤖 Local Analysis Mode (Instant Client-Side Engine):</span>`;
+                ? `<span class="text-[10px] bg-slate-700 text-amber-400 px-1.5 py-0.5 rounded inline-block mb-2 font-mono">⚠️ Fallback (${statusMessage}) - Local Framework Active:</span>`
+                : `<span class="text-[10px] bg-slate-700 text-emerald-400 px-1.5 py-0.5 rounded inline-block mb-2 font-mono font-bold">🤖 Local Client-Side Engine Active:</span>`;
 
             container.innerHTML = `<div>${prefix}</div><p class="text-xs text-slate-200 leading-relaxed">${insight} <br><br><b class="text-red-400">Next Strategic Step:</b> ${action}</p>`;
         }
