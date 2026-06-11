@@ -60,7 +60,7 @@
                     </h2>
                     <p class="text-xs text-slate-400 mt-1 mb-4">Urgent review prioritized by composite health, contract renewal, and feature adoption vectors.</p>
                     <div id="priorityList" class="space-y-3">
-                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -95,6 +95,7 @@
                             <thead>
                                 <tr class="bg-slate-100 text-slate-600 uppercase tracking-wider font-semibold border-b border-slate-200">
                                     <th class="p-3">Customer Name</th>
+                                    <th class="p-3">CSM Manager</th>
                                     <th class="p-3">Risk Index</th>
                                     <th class="p-3">Health</th>
                                     <th class="p-3">Adoption</th>
@@ -104,7 +105,7 @@
                                 </tr>
                             </thead>
                             <tbody id="portfolioTableBody" class="divide-y divide-slate-100">
-                                </tbody>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -140,7 +141,6 @@
         let rawAccountData = [];
         let computedAccounts = [];
 
-        // Modal Utility Handlers (Moved here to ensure safe execution framework)
         function closeAiModal() { 
             document.getElementById('aiModal').classList.add('hidden'); 
         }
@@ -152,12 +152,11 @@
             }
         }
 
-        // Converts Excel serialized numeric dates safely into Date objects and strings
         function parseExcelDate(excelSerial) {
             const num = parseInt(excelSerial);
             if (isNaN(num) || num < 25569) return { obj: new Date(), str: excelSerial || "N/A" };
             const dateObj = new Date((num - 25569) * 86400 * 1000);
-            const str = dateObj.toISOString().split('T')[0]; // Yields standard YYYY-MM-DD
+            const str = dateObj.toISOString().split('T')[0];
             return { obj: dateObj, str: str };
         }
 
@@ -165,7 +164,6 @@
             const savedKey = localStorage.getItem('jaggaer_openai_key');
             if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
             
-            // Drag & Drop UI Event Handlers initialized securely
             const zone = document.getElementById('uploadZone');
             zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('border-red-500', 'bg-red-50/10'); });
             zone.addEventListener('dragleave', () => { zone.classList.remove('border-red-500', 'bg-red-50/10'); });
@@ -216,6 +214,7 @@
                     continue; 
                 }
 
+                const csmName = acc['CSM Name'] ? acc['CSM Name'].trim() : "Unassigned";
                 const health = parseInt(acc['Health Score']) || 0;
                 const adoption = parseInt(acc['Product Adoption %']) || 0;
                 const tickets = parseInt(acc['Open Support Tickets']) || 0;
@@ -247,6 +246,7 @@
                 computedAccounts.push({
                     ...acc,
                     customerName: acc['Customer Name'],
+                    csmName,
                     health,
                     adoption,
                     tickets,
@@ -308,6 +308,7 @@
                     <div class="flex justify-between items-start">
                         <div>
                             <p class="font-bold text-slate-900 text-xs">${acc.customerName}</p>
+                            <p class="text-[10px] text-slate-400 font-medium">CSM: ${acc.csmName}</p>
                             <p class="text-[11px] text-slate-500 mt-0.5">Renewal: <span class="font-medium text-slate-700">${acc.renewalStr}</span> (${acc.daysToRenewal}d left)</p>
                         </div>
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">Index: ${acc.riskScore}</span>
@@ -327,7 +328,7 @@
         function renderMainTable(data) {
             const body = document.getElementById('portfolioTableBody');
             if (data.length === 0) {
-                body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-400">No active accounts matching the filter metrics.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-400">No active accounts matching the filter metrics.</td></tr>`;
                 return;
             }
 
@@ -339,6 +340,7 @@
                 return `
                     <tr class="hover:bg-slate-50/80 transition border-b border-slate-100">
                         <td class="p-3 font-semibold text-slate-900">${acc.customerName}</td>
+                        <td class="p-3 text-slate-600 font-medium">${acc.csmName}</td>
                         <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] ${badgeClass}">${acc.tier} (${acc.riskScore})</span></td>
                         <td class="p-3">
                             <div class="flex items-center space-x-1.5">
